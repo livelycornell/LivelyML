@@ -22,7 +22,7 @@ dropout = 0.5 # Dropout, probability to keep units
 numldprocess=4 # multi-threading for loading images
 
 
-dataset = np.load('../'+dataset_name)
+dataset = np.load('../' + dataset_name)
 
 [user_train, user_validation, user_test, Item, usernum, itemnum] = dataset
 
