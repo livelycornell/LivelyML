@@ -26,6 +26,17 @@ dataset = np.load('../'+dataset_name)
 
 [user_train, user_validation, user_test, Item, usernum, itemnum] = dataset
 
+newItem = {}
+for idx in Item:
+    item = Item[idx]
+    print 'item: ', item
+    if 'Jeans' in item['categories'][0]:
+        print 'item[categories][0]: ', item['categories'][0]
+        newItem[len(newItem)] = item
+
+
+Item = newItem
+
 # Create some wrappers for simplicity
 def conv2d(x, W, b, strides=1):
     # Conv2D wrapper, with bias and relu activation
