@@ -22,13 +22,12 @@ dropout = 0.5 # Dropout, probability to keep units
 numldprocess=4 # multi-threading for loading images
 
 
-dataset = np.load('../'+dataset_name)
+dataset = np.load('../' + dataset_name)
 
 [user_train, user_validation, user_test, Item, usernum, itemnum] = dataset
 
 print "len of old Item: ", len(Item)
 print "itemnum: ", itemnum
-print Item[10000]
 
 item_specific_cat = {}
 for idx in Item:
@@ -158,28 +157,28 @@ with tf.device('/gpu:0'):
 # Initializing the variables
 init = tf.initialize_all_variables()
 
-def AUC(train, test, U, I):
+def AUC(train,test,U,I):
     ans=0
     cc=0
     for u in train:    
-        i = test[u][0]['productid']
-        T = np.dot(U[u,:], I.T)
-        cc += 1
-        M = set()
+        i=test[u][0]['productid']
+        T=np.dot(U[u,:],I.T)
+        cc+=1
+        M=set()      
         for item in train[u]:
             M.add(item['productid'])
         M.add(i)
             
-        count = 0
-        tmpans = 0
+        count=0
+        tmpans=0
         #for j in xrange(itemnum):
-        for j in random.sample(xrange(itemnum), 100): #sample
+        for j in random.sample(xrange(itemnum),100): #sample
             if j in M: continue
-            if T[i] > T[j]: tmpans += 1
-            count += 1
-        tmpans /= float(count)
-        ans += tmpans
-    ans /= float(cc)
+            if T[i]>T[j]: tmpans+=1
+            count+=1
+        tmpans/=float(count)
+        ans+=tmpans
+    ans/=float(cc)
     return ans
 
 def Evaluation(step):
@@ -196,8 +195,8 @@ def Evaluation(step):
             cc += 1
         I[idx[i][0]:(idx[i][-1]+1)]=sess.run(result_test,feed_dict={image_test:input_images})[:(idx[i][-1]-idx[i][0]+1)]
     print 'export finised!'
-    np.save('UI_' + str(K) + '_' + str(step) + '.npy', [U, I])
-    return AUC(user_train, user_validation, U, I), AUC(user_train, user_test, U, I)
+    np.save('UI_'+str(K)+'_'+str(step)+'.npy',[U,I])
+    return AUC(user_train,user_validation,U,I), AUC(user_train,user_test,U,I)
 
 
 def category_evaluation():
@@ -264,7 +263,7 @@ step = 1
 saver = tf.train.Saver([k for k in tf.global_variables() if k.name.startswith('DVBPR')])
 
 epoch=0
-while step * batch_size <= batch_size:#training_epoch * oneiteration + 1:
+while step * batch_size <= training_epoch * oneiteration + 1:
 
     sess.run(optimizer, feed_dict={keep_prob: dropout})
     
