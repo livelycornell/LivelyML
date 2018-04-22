@@ -8,8 +8,13 @@ import numpy as np
 import threading
 from cStringIO import StringIO
 import tensorflow as tf
-import inception
-from inception import transfer_values_cache
+from keras.applications.vgg16 import VGG16
+from keras.applications.vgg16 import preprocess_input
+from keras.preprocessing.image import load_img
+from keras.preprocessing.image import img_to_array
+import copy
+from keras.backend import clear_session
+
 
 
 dataset_name = 'AmazonFashion6ImgPartitioned.npy'
@@ -22,22 +27,15 @@ learning_rate = 1e-4
 training_epoch = 1
 batch_size = 128
 dropout = 0.5 # Dropout, probability to keep units
-numldprocess=4 # multi-threading for loading images
+numldprocess=1 # multi-threading for loading images
 
+vgg16 = VGG16(weights='imagenet', input_shape=(224, 224, 3), include_top=False)
+graph = tf.get_default_graph()
+print vgg16.summary()
 
 dataset = np.load('../' + dataset_name)
 
 [user_train, user_validation, user_test, Item, usernum, itemnum] = dataset
-
-print "len of old Item: ", len(Item)
-print "itemnum: ", itemnum
-
-item_specific_cat = {}
-for idx in Item:
-    item = Item[idx]
-    if 'Jeans' in item['categories'][0]:
-        item_specific_cat[len(item_specific_cat)] = item
-
 
 # Create some wrappers for simplicity
 def conv2d(x, W, b, strides=1):
@@ -55,7 +53,8 @@ def avgpool2d(x, k=2):
                           padding='SAME')
 
 weights = {
-    'wc1': [11, 11, 3, 64],
+    'wc1': [11, 11, 512, 64],
+    #'wc1': [128, 7, 7, 512],
     'wc2': [5, 5, 64, 256],
     'wc3': [3, 3, 256, 256],
     'wc4': [3, 3, 256, 256],
@@ -85,7 +84,7 @@ def Biases(name):
 # Create CNN model
 def CNN(x,dropout):
     # Reshape input picture
-    x = tf.reshape(x, shape=[-1, 224, 224, 3])
+    x = tf.reshape(x, shape=[-1, 7, 7, 512])
 
 
     conv1 = conv2d(x, Weights('wc1'), Biases('bc1'), strides=4)
@@ -126,13 +125,13 @@ with tf.device('/gpu:0'):
     queueu = tf.placeholder(dtype=tf.int32,shape=[1])
     queuei = tf.placeholder(dtype=tf.int32,shape=[1])
     queuej = tf.placeholder(dtype=tf.int32,shape=[1])
-    queueimage1 = tf.placeholder(dtype=tf.uint8,shape=[224,224,3])
-    queueimage2 = tf.placeholder(dtype=tf.uint8,shape=[224,224,3])
-    batch_train_queue = tf.FIFOQueue(batch_size*5, dtypes=[tf.int32,tf.int32,tf.int32,tf.uint8,tf.uint8], shapes=[[1],[1],[1],[224,224,3],[224,224,3]])
+    queueimage1 = tf.placeholder(dtype=tf.uint8,shape=[7,7,512])
+    queueimage2 = tf.placeholder(dtype=tf.uint8,shape=[7,7,512])
+    batch_train_queue = tf.FIFOQueue(batch_size*5, dtypes=[tf.int32,tf.int32,tf.int32,tf.uint8,tf.uint8], shapes=[[1],[1],[1],[7,7,512],[7,7,512]])
     batch_train_queue_op = batch_train_queue.enqueue([queueu,queuei,queuej,queueimage1,queueimage2]);
     u,i,j,image1,image2 = batch_train_queue.dequeue_many(batch_size)
 
-    image_test=tf.placeholder(dtype=tf.uint8,shape=[batch_size,224,224,3])
+    image_test=tf.placeholder(dtype=tf.uint8,shape=[batch_size,7,7,512])
     
     image1=(tf.to_float(image1)-127.5)/127.5
     image2=(tf.to_float(image2)-127.5)/127.5
@@ -191,39 +190,24 @@ def Evaluation(step):
     I=np.zeros([itemnum,K],dtype=np.float32)
     idx=np.array_split(range(itemnum),(itemnum+batch_size-1)/batch_size)
     
-    input_images=np.zeros([batch_size,224,224,3],dtype=np.int8)
+    input_images=np.zeros([batch_size,7,7,512],dtype=np.int8)
     for i in range(len(idx)):
         cc = 0
         for j in idx[i]:
-            input_images[cc] = np.uint8(np.asarray(Image.open(StringIO(Item[j]['imgs'])).convert('RGB').resize((224,224))))
-            cc += 1
+            
+            img = np.float64(np.asarray(Image.open(StringIO(Item[j]['imgs'])).convert('RGB').resize((224,224))))
+            img = img.reshape((1, img.shape[0], img.shape[1], img.shape[2]))
+            img1 = preprocess_input(copy.copy(img))
+            global graph
+            with graph.as_default():
+                img1 = np.squeeze(vgg16.predict(img1), axis=0)
+
+                input_images[cc] = img1#np.uint8(np.asarray(Image.open(StringIO(Item[j]['imgs'])).convert('RGB').resize((224,224))))
+                cc += 1
         I[idx[i][0]:(idx[i][-1]+1)]=sess.run(result_test,feed_dict={image_test:input_images})[:(idx[i][-1]-idx[i][0]+1)]
     print 'export finised!'
     np.save('UI_'+str(K)+'_'+str(step)+'.npy',[U,I])
     return AUC(user_train,user_validation,U,I), AUC(user_train,user_test,U,I)
-
-
-def category_evaluation():
-    print 'category_evaluation'
-
-    item_cat_num = len(item_specific_cat)
-    U = sess.run(thetau)
-    I = np.zeros([item_cat_num, K], dtype=np.float32)
-    idx = np.array_split(range(item_cat_num), (item_cat_num + batch_size - 1) / batch_size)
-
-    input_images = np.zeros([batch_size, 224, 224, 3], dtype=np.int8)
-    for i in range(len(idx)):
-        cc = 0
-        for j in idx[i]:
-            input_images[cc] = np.uint8(
-                np.asarray(Image.open(StringIO(Item[j]['imgs'])).convert('RGB').resize((224, 224))))
-            cc += 1
-        I[idx[i][0]:(idx[i][-1] + 1)] = sess.run(result_test, feed_dict={image_test: input_images})[
-                                        :(idx[i][-1] - idx[i][0] + 1)]
-    print 'category_evaluation finised!'
-    #np.save('UI_' + str(K) + '_' + str(step) + '.npy', [U, I])
-    return AUC(user_train, user_validation, U, I), AUC(user_train, user_test, U, I)
-
 
 
 def sample(user):
@@ -240,20 +224,35 @@ def sample(user):
 
 def load_image_async():
 
-    inception.maybe_download()
-    model = inception.Inception()
     while True:
         (uuu,iii,jjj)=sample(user_train)
 
-        jpg1=np.uint8(np.asarray(Image.open(StringIO(Item[iii]['imgs'])).convert('RGB').resize((224,224))))
-        jpg2=np.uint8(np.asarray(Image.open(StringIO(Item[jjj]['imgs'])).convert('RGB').resize((224,224))))
-        j1 = transfer_values_cache(images=jpg1, model=model)
-        j2 = transfer_values_cache(images=jpg2, model=model)
-        sess.run(batch_train_queue_op,feed_dict={queueu:np.asarray([uuu]),
+        img1=np.float64(np.asarray(Image.open(StringIO(Item[iii]['imgs'])).convert('RGB').resize((224,224))))
+        img2=np.float64(np.asarray(Image.open(StringIO(Item[jjj]['imgs'])).convert('RGB').resize((224,224))))
+
+        img1 = img1.reshape((1, img1.shape[0], img1.shape[1], img1.shape[2])) 
+        img2 = img2.reshape((1, img2.shape[0], img2.shape[1], img2.shape[2]))
+
+        j1 = preprocess_input(copy.copy(img1))
+        j2 = preprocess_input(copy.copy(img2))
+
+        print "===== j1.shape: ", j1.shape
+        print "===== j2.shape: ", j2.shape
+        global graph
+        with graph.as_default():
+            jpg1 = np.squeeze(vgg16.predict(j1), axis=0)
+            jpg2 = np.squeeze(vgg16.predict(j2), axis=0) 
+
+            print "===== jpg1.shape: ", jpg1.shape
+            print "===== jpg2.shape: ", jpg2.shape
+
+            sess.run(batch_train_queue_op,feed_dict={queueu:np.asarray([uuu]),
                                                  queuei:np.asarray([iii]),
                                                  queuej:np.asarray([jjj]),
-                                                 queueimage1:j1,queueimage2:j2,
+                                                 queueimage1:jpg1,queueimage2:jpg2,
                                                 })
+
+
     
 f=open('DVBPR.log','w')
 config = tf.ConfigProto(log_device_placement=False,allow_soft_placement=True)
@@ -279,10 +278,7 @@ while step * batch_size <= batch_size:#training_epoch * oneiteration + 1:
     
     print 'Step#' + str(step) + ' CNN update'
 
-    epoch += 1
-    auc_valid, auc_test = category_evaluation()
 
-    '''
     if step * batch_size / oneiteration > epoch:
         epoch += 1
         saver.save(sess,'./DVBPR_auc_' + str(K) + '_' + str(step) + '.ckpt')
@@ -290,7 +286,6 @@ while step * batch_size <= batch_size:#training_epoch * oneiteration + 1:
         print 'Epoch #' + str(epoch) + ':' + str(auc_test) + ' ' + str(auc_valid) + '\n'
         f.write('Epoch #' + str(epoch) + ':' + str(auc_test) + ' ' + str(auc_valid) + '\n')
         f.flush()
-    '''
     step += 1
 
 print "Optimization Finished!"
