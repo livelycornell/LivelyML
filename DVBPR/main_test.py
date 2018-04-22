@@ -8,6 +8,9 @@ import numpy as np
 import threading
 from cStringIO import StringIO
 import tensorflow as tf
+import inception
+from inception import transfer_values_cache
+
 
 dataset_name = 'AmazonFashion6ImgPartitioned.npy'
 
@@ -118,6 +121,7 @@ def CNN(x,dropout):
 
 #define model
 with tf.device('/gpu:0'):
+
     #training sample
     queueu = tf.placeholder(dtype=tf.int32,shape=[1])
     queuei = tf.placeholder(dtype=tf.int32,shape=[1])
@@ -235,14 +239,20 @@ def sample(user):
     return (u,i,j)
 
 def load_image_async():
+
+    inception.maybe_download()
+    model = inception.Inception()
     while True:
         (uuu,iii,jjj)=sample(user_train)
+
         jpg1=np.uint8(np.asarray(Image.open(StringIO(Item[iii]['imgs'])).convert('RGB').resize((224,224))))
         jpg2=np.uint8(np.asarray(Image.open(StringIO(Item[jjj]['imgs'])).convert('RGB').resize((224,224))))
+        j1 = transfer_values_cache(images=jpg1, model=model)
+        j2 = transfer_values_cache(images=jpg2, model=model)
         sess.run(batch_train_queue_op,feed_dict={queueu:np.asarray([uuu]),
                                                  queuei:np.asarray([iii]),
                                                  queuej:np.asarray([jjj]),
-                                                 queueimage1:jpg1,queueimage2:jpg2,
+                                                 queueimage1:j1,queueimage2:j2,
                                                 })
     
 f=open('DVBPR.log','w')
@@ -263,12 +273,16 @@ step = 1
 saver = tf.train.Saver([k for k in tf.global_variables() if k.name.startswith('DVBPR')])
 
 epoch=0
-while step * batch_size <= training_epoch * oneiteration + 1:
+while step * batch_size <= batch_size:#training_epoch * oneiteration + 1:
 
     sess.run(optimizer, feed_dict={keep_prob: dropout})
     
     print 'Step#' + str(step) + ' CNN update'
 
+    epoch += 1
+    auc_valid, auc_test = category_evaluation()
+
+    '''
     if step * batch_size / oneiteration > epoch:
         epoch += 1
         saver.save(sess,'./DVBPR_auc_' + str(K) + '_' + str(step) + '.ckpt')
@@ -276,7 +290,7 @@ while step * batch_size <= training_epoch * oneiteration + 1:
         print 'Epoch #' + str(epoch) + ':' + str(auc_test) + ' ' + str(auc_valid) + '\n'
         f.write('Epoch #' + str(epoch) + ':' + str(auc_test) + ' ' + str(auc_valid) + '\n')
         f.flush()
-    
+    '''
     step += 1
 
 print "Optimization Finished!"
