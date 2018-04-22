@@ -53,23 +53,24 @@ def avgpool2d(x, k=2):
                           padding='SAME')
 
 weights = {
-    'wc1': [11, 11, 512, 64],
-    #'wc1': [128, 7, 7, 512],
-    'wc2': [5, 5, 64, 256],
-    'wc3': [3, 3, 256, 256],
-    'wc4': [3, 3, 256, 256],
-    'wc5': [3, 3, 256, 256],    
+    #'wc1': [11, 11, 3, 64],
+    #'wc2': [5, 5, 64, 256],
+    #'wc3': [3, 3, 256, 256],
+    #'wc4': [3, 3, 256, 256],
+    #'wc5': [3, 3, 256, 256],    
+    'wc6': [3, 3, 512, 512],
     'wd1': [7*7*256, 4096],
     'wd2': [4096, 4096],
     'wd3': [4096, K],
 }
 
 biases = {
-    'bc1': [64],
-    'bc2': [256],
-    'bc3': [256],
-    'bc4': [256],
-    'bc5': [256],
+    #'bc1': [64],
+    #'bc2': [256],
+    #'bc3': [256],
+    #'bc4': [256],
+    #'bc5': [256],
+    'bc6': [512],
     'bd1': [4096],
     'bd2': [4096],
     'bd3': [K],
@@ -87,6 +88,7 @@ def CNN(x,dropout):
     x = tf.reshape(x, shape=[-1, 7, 7, 512])
 
 
+    '''
     conv1 = conv2d(x, Weights('wc1'), Biases('bc1'), strides=4)
     conv1 = tf.nn.relu(conv1)
     conv1 = maxpool2d(conv1, k=2)
@@ -103,9 +105,12 @@ def CNN(x,dropout):
     
     conv5 = conv2d(conv4, Weights('wc5'), Biases('bc5'))
     conv5 = tf.nn.relu(conv5)
-    conv5 = maxpool2d(conv5, k=2)
+    '''
+    conv6 = conv2d(x, Weights("wc6"), Biases('bc6'), strides=4)
+    conv6 = tf.nn.relu(conv6)
+    conv6 = maxpool2d(conv6, k=2)
 
-    fc1 = tf.reshape(conv5, [-1,weights['wd1'][0]])
+    fc1 = tf.reshape(conv6, [-1,weights['wd1'][0]])
     fc1 = tf.add(tf.matmul(fc1, Weights('wd1')), Biases('bd1'))
     fc1 = tf.nn.relu(fc1)
     fc1 = tf.nn.dropout(fc1, dropout)
@@ -149,7 +154,7 @@ with tf.device('/gpu:0'):
         scope.reuse_variables()
         result2 = CNN(image2,dropout)
         result_test = CNN(_image_test,1.0)
-        nn_regularizers = sum(map(tf.nn.l2_loss,[Weights('wd1'), Weights('wd2'), Weights('wd3'), Weights('wc1'), Weights('wc2'), Weights('wc3'), Weights('wc4'), Weights('wc5')]))
+        nn_regularizers = sum(map(tf.nn.l2_loss,[Weights('wc6'), ]#Weights('wd1'), Weights('wd2'), Weights('wd3'), Weights('wc1'), Weights('wc2'), Weights('wc3'), Weights('wc4'), Weights('wc5')]))
         thetau = tf.Variable(tf.random_uniform([usernum,K],minval=0,maxval=1)/100)
    
     cost_train = tf.reduce_sum(tf.log(tf.sigmoid(tf.reduce_sum(tf.multiply(tf.gather(thetau,u),tf.subtract(result1,result2)),1,keep_dims=True))))
