@@ -59,7 +59,7 @@ weights = {
     #'wc4': [3, 3, 256, 256],
     #'wc5': [3, 3, 256, 256],    
     'wc6': [3, 3, 512, 512],
-    'wd1': [7*7*256, 4096],
+    'wd1': [2*2*512, 4096], # 7*7*512 = 25088
     'wd2': [4096, 4096],
     'wd3': [4096, K],
 }
@@ -87,6 +87,7 @@ def CNN(x,dropout):
     # Reshape input picture
     x = tf.reshape(x, shape=[-1, 7, 7, 512])
 
+    print ' ===== CNN update ===== '
 
     '''
     conv1 = conv2d(x, Weights('wc1'), Biases('bc1'), strides=4)
@@ -106,9 +107,12 @@ def CNN(x,dropout):
     conv5 = conv2d(conv4, Weights('wc5'), Biases('bc5'))
     conv5 = tf.nn.relu(conv5)
     '''
-    conv6 = conv2d(x, Weights("wc6"), Biases('bc6'), strides=4)
+    print 'x.shape: ', x.shape  # 128*7*7*512
+    conv6 = conv2d(x, Weights("wc6"), Biases('bc6'), strides=2)
+    print 'conv6.shape before pooling: ', conv6.shape # 128*4*4*512
     conv6 = tf.nn.relu(conv6)
     conv6 = maxpool2d(conv6, k=2)
+    print 'conv6.shape after pooling: ', conv6.shape # 128*2*2*512 = 262144
 
     fc1 = tf.reshape(conv6, [-1,weights['wd1'][0]])
     fc1 = tf.add(tf.matmul(fc1, Weights('wd1')), Biases('bd1'))
@@ -154,7 +158,7 @@ with tf.device('/gpu:0'):
         scope.reuse_variables()
         result2 = CNN(image2,dropout)
         result_test = CNN(_image_test,1.0)
-        nn_regularizers = sum(map(tf.nn.l2_loss,[Weights('wc6'), ]#Weights('wd1'), Weights('wd2'), Weights('wd3'), Weights('wc1'), Weights('wc2'), Weights('wc3'), Weights('wc4'), Weights('wc5')]))
+        nn_regularizers = sum(map(tf.nn.l2_loss,[Weights('wc6'), Weights('wd1'), Weights('wd2'), Weights('wd3')]))#Weights('wd1'), Weights('wd2'), Weights('wd3'), Weights('wc1'), Weights('wc2'), Weights('wc3'), Weights('wc4'), Weights('wc5')]))
         thetau = tf.Variable(tf.random_uniform([usernum,K],minval=0,maxval=1)/100)
    
     cost_train = tf.reduce_sum(tf.log(tf.sigmoid(tf.reduce_sum(tf.multiply(tf.gather(thetau,u),tf.subtract(result1,result2)),1,keep_dims=True))))
@@ -166,6 +170,8 @@ with tf.device('/gpu:0'):
 init = tf.initialize_all_variables()
 
 def AUC(train,test,U,I):
+
+    print ' ===== AUC ===== '
     ans=0
     cc=0
     for u in train:    
@@ -190,7 +196,7 @@ def AUC(train,test,U,I):
     return ans
 
 def Evaluation(step):
-    print 'Evaluation'
+    print ' ===== Evaluation ====='
     U=sess.run(thetau)
     I=np.zeros([itemnum,K],dtype=np.float32)
     idx=np.array_split(range(itemnum),(itemnum+batch_size-1)/batch_size)
@@ -216,6 +222,7 @@ def Evaluation(step):
 
 
 def sample(user):
+
     u = random.randrange(usernum)
     numu = len(user[u])
     i = user[u][random.randrange(numu)]['productid']
@@ -229,6 +236,8 @@ def sample(user):
 
 def load_image_async():
 
+    print '===== load image async ====='
+
     while True:
         (uuu,iii,jjj)=sample(user_train)
 
@@ -241,15 +250,15 @@ def load_image_async():
         j1 = preprocess_input(copy.copy(img1))
         j2 = preprocess_input(copy.copy(img2))
 
-        print "===== j1.shape: ", j1.shape
-        print "===== j2.shape: ", j2.shape
+        #print "===== j1.shape: ", j1.shape
+        #print "===== j2.shape: ", j2.shape
         global graph
         with graph.as_default():
             jpg1 = np.squeeze(vgg16.predict(j1), axis=0)
             jpg2 = np.squeeze(vgg16.predict(j2), axis=0) 
 
-            print "===== jpg1.shape: ", jpg1.shape
-            print "===== jpg2.shape: ", jpg2.shape
+            #print "===== jpg1.shape: ", jpg1.shape
+            #print "===== jpg2.shape: ", jpg2.shape
 
             sess.run(batch_train_queue_op,feed_dict={queueu:np.asarray([uuu]),
                                                  queuei:np.asarray([iii]),
@@ -277,7 +286,7 @@ step = 1
 saver = tf.train.Saver([k for k in tf.global_variables() if k.name.startswith('DVBPR')])
 
 epoch=0
-while step * batch_size <= batch_size:#training_epoch * oneiteration + 1:
+while step * batch_size <= training_epoch * oneiteration + 1:
 
     sess.run(optimizer, feed_dict={keep_prob: dropout})
     
