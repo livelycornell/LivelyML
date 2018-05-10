@@ -1,5 +1,5 @@
 # Lively Machine Learning Models
-## We integrate DVBPR/GAN model to generate the best outfit according to user preference.
+- We integrate (DVBPR + VGG16)/GAN model to generate the best outfit according to user preference.
 
 ## Environment
 The code is tested under a Linux desktop with a single GTX-1080 Ti GPU.
