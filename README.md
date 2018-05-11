@@ -2,7 +2,7 @@
 - We integrate (DVBPR + VGG16)/GAN model to generate the best outfit according to user preference.
 
 ## Environment
-The code is tested under a Linux desktop with a single GTX-1080 Ti GPU.
+The code is implemented and tested on AWS P2 with GPU power.
 
 Requirements:
 
